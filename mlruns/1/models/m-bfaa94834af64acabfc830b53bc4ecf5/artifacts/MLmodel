@@ -1,0 +1,30 @@
+artifact_path: file:C:/DYANAMIC_PRICING_ENGINE/mlruns/1/models/m-bfaa94834af64acabfc830b53bc4ecf5/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.14.3
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBRegressor
+    model_format: ubj
+    xgb_version: 3.2.0
+is_signature_from_type_hint: false
+mlflow_version: 3.10.0
+model_id: m-bfaa94834af64acabfc830b53bc4ecf5
+model_size_bytes: 41869
+model_uuid: m-bfaa94834af64acabfc830b53bc4ecf5
+prompts: null
+run_id: 38766fd92c0a4c3fa2baecc68dc3bb0f
+signature:
+  inputs: '[{"type": "long", "name": "riders", "required": true}, {"type": "long",
+    "name": "drivers", "required": true}, {"type": "long", "name": "is_raining", "required":
+    true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float32", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-02-21 15:24:39.750168'

@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlops-app
+  namespace: mlops  # Added this to ensure it goes to the right place
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlops-app
+  template:
+    metadata:
+      labels:
+        app: mlops-app
+    spec:
+      containers:
+        - name: mlops-app
+          image: mlops-app:v4
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          resources:       # <--- This block was missing!
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
