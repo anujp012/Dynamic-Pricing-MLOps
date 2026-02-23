@@ -1,7 +1,7 @@
 import sys
 import pandas as pd
-from evidently.report import Report
-from evidently.metric_preset import DataDriftPreset
+from evidently import Report
+from evidently.presets import DataDriftPreset
 
 def analyze_drift():
     reference = pd.read_csv('uber.csv').head(500) 
