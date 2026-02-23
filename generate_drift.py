@@ -1,26 +1,32 @@
 import sys
+import pandas as pd
+from evidently.report import Report
+from evidently.metric_preset import DataDriftPreset
 
 def analyze_drift():
-    # 1. Setup your data
-    reference_avg_fare = 11.36
-    current_avg_fare = 20.45
-    threshold = 0.90  
+    # 1. Load Real Datasets (No more hardcoded averages!)
+    reference = pd.read_csv('uber.csv').head(500)  # Baseline training data
+    current = pd.read_csv('new_batch.csv')         # New production batch
     
-    # 2. Calculate Drift
-    drift_val = (current_avg_fare - reference_avg_fare) / reference_avg_fare
+    # 2. Run Statistical Drift Analysis (KS Test/PSI)
+    drift_report = Report(metrics=[DataDriftPreset()])
+    drift_report.run(reference_data=reference, current_data=current)
     
-    print(f"MLOps Pipeline: Starting Automated Drift Analysis...")
-    print(f"Reference Avg Fare: ${reference_avg_fare:.2f}")
-    print(f"Current Avg Fare: ${current_avg_fare:.2f}")
-    print(f"Detected Drift: {drift_val:.2%}")
+    # 3. Save the HTML Dashboard
+    drift_report.save_html("drift_report.html")
+    
+    # 4. Extract results to control the Pipeline
+    result = drift_report.as_dict()
+    drift_detected = result['metrics'][0]['result']['dataset_drift']
+    
+    print(f"MLOps Status: Statistical Drift Detected? {drift_detected}")
 
-    # 3. The Automation Logic
-    if drift_val > threshold:
-        print(f"DRIFT ALERT: Drift exceeds threshold ({threshold:.1%}). Stopping Pipeline!")
-        sys.exit(1) # This kills the GitHub Action
+    if drift_detected:
+        print("ALERT: Statistical shift detected in features. Stopping Pipeline!")
+        sys.exit(1) # Fails the GitHub Action
     else:
-        print("SUCCESS: Drift within acceptable limits. Proceeding to deployment...")
-        sys.exit(0) # This allows the GitHub Action to continue
+        print("SUCCESS: Data distribution is stable.")
+        sys.exit(0) # Passes the GitHub Action
 
 if __name__ == "__main__":
     analyze_drift()

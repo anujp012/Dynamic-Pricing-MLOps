@@ -2,7 +2,7 @@ name: MLOps Automated Pipeline
 
 on:
   push:
-    branches: [ main ]  # Triggers every time you push code
+    branches: [ main ]
 
 jobs:
   build-and-test:
@@ -19,11 +19,17 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install -r requirements.txt
-          pip install evidently  # Ensure drift tool is installed
+          pip install pandas evidently
 
       - name: Run Drift Analysis
         run: python generate_drift.py
 
       - name: Build Docker Image
-        run: |
-          docker build -t mlops-app:latest .
+        run: docker build -t mlops-app:latest .
+
+      - name: Upload Drift Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlops-drift-report
+          path: drift_report.html
