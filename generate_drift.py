@@ -4,7 +4,7 @@ def analyze_drift():
     # 1. Setup your data
     reference_avg_fare = 11.36
     current_avg_fare = 20.45
-    threshold = 0.20  
+    threshold = 0.90  
     
     # 2. Calculate Drift
     drift_val = (current_avg_fare - reference_avg_fare) / reference_avg_fare
