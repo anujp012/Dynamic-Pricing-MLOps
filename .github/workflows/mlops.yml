@@ -33,3 +33,5 @@ jobs:
         with:
           name: mlops-drift-report
           path: drift_report.html
+
+          # Triggering stable run with Python 3.12
