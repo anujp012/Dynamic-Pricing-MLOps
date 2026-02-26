@@ -1,7 +1,9 @@
 streamlit
-pandas
-numpy
+pandas==2.2.2
+numpy==1.26.4
 scikit-learn
 mlflow
 joblib
 xgboost
+fastapi
+evidently==0.4.20
