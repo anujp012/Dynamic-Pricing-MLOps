@@ -7,6 +7,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
+    env:
+      ALLOW_DRIFT: "true"   # 👈 Move it here
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -20,14 +24,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install pandas evidently
-        env:
-          ALLOW_DRIFT: "true"
-            
-            
 
       - name: Run Drift Analysis
         run: python generate_drift.py
-        
 
       - name: Build Docker Image
         run: docker build -t mlops-app:latest .
@@ -38,5 +37,3 @@ jobs:
         with:
           name: mlops-drift-report
           path: drift_report.html
-
-          # Triggering stable run with Python 3.12
