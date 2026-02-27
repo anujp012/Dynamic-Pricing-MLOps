@@ -13,6 +13,7 @@ def analyze_drift():
 
 
     mlflow.set_tracking_uri("file:./mlruns")
+    mlflow.set_experiment("Uber_Dynamic_Pricing")
 
     reference = pd.read_csv('uber.csv').head(500)
     current = pd.read_csv('new_batch.csv')
