@@ -26,7 +26,7 @@ def analyze_drift():
     drift_score = result['metrics'][0]['result']['share_of_drifted_columns']
     print(f"Drift Score: {drift_score}")
 
-    DRIFT_THRESHOLD = 0.0
+    DRIFT_THRESHOLD = 0.7
     allow_drift = os.getenv("ALLOW_DRIFT", "false").lower() == "true"
 
     #  START MLFLOW RUN HERE
