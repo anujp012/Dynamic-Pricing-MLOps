@@ -3,13 +3,16 @@ name: MLOps Automated Pipeline
 on:
   push:
     branches: [ main ]
+    
+  schedule:
+    - cron: "0 */2 * * *"
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
     env:
-      ALLOW_DRIFT: "true"   # 👈 Move it here
+      ALLOW_DRIFT: "true"   
 
     steps:
       - name: Checkout Code
