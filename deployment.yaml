@@ -2,9 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mlops-app
-  namespace: mlops  # Added this to ensure it goes to the right place
+  namespace: mlops
 spec:
-  replicas: 1
+  replicas: 2                          # FIX: was 1
   selector:
     matchLabels:
       app: mlops-app
@@ -15,14 +15,63 @@ spec:
     spec:
       containers:
         - name: mlops-app
-          image: mlops-app:v4
-          imagePullPolicy: Never
+          image: anuj1303/mlops-app:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
-          resources:       # <--- This block was missing!
+
+          # FIX: Pass config as env vars — no hardcoding in Python files
+          env:
+            - name: DRIFT_THRESHOLD
+              value: "0.3"
+            - name: ALLOW_DRIFT
+              value: "false"
+            - name: FORCE_DRIFT
+              value: "false"
+
+          resources:
             requests:
-              memory: "64Mi"
-              cpu: "100m"
-            limits:
               memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "256Mi"
               cpu: "500m"
+
+          # FIX: Readiness probe — K8s only sends traffic when app is ready
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+          # FIX: Liveness probe — K8s restarts pod if it hangs
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+
+---
+# FIX: HPA — auto-scales pods 2→5 based on CPU load
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mlops-app-hpa
+  namespace: mlops
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mlops-app
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

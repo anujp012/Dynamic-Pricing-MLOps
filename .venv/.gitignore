@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+env/
+venv/
+*.egg-info/
+
+# FIX: Stop tracking the huge drift report HTML in git
+# It gets uploaded as a GitHub Actions artifact instead
+drift_report.html
+
+# MLflow & model files (large binaries)
+mlflow.db
+mlruns/
+model.pkl
+
+# Data files (use DVC or just exclude)
+*.db
+*.csv
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+pipeline_status.txt*

@@ -1,0 +1,11 @@
+digest: 1ecfca92
+name: dataset
+profile: '{"num_rows": 160000, "num_elements": 800000}'
+schema: '{"mlflow_colspec": [{"type": "double", "name": "pickup_longitude", "required":
+  true}, {"type": "double", "name": "pickup_latitude", "required": true}, {"type":
+  "double", "name": "dropoff_longitude", "required": false}, {"type": "double", "name":
+  "dropoff_latitude", "required": false}, {"type": "long", "name": "passenger_count",
+  "required": true}]}'
+source: '{"tags": {"mlflow.user": "anujp", "mlflow.source.name": "train_mini.py",
+  "mlflow.source.type": "LOCAL", "mlflow.source.git.commit": "d3b36ddb7b1c96d4dbfcae215a8db3f16e5d3e68"}}'
+source_type: code

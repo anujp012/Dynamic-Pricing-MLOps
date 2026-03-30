@@ -1,0 +1,10 @@
+artifact_location: file:///C:/DYANAMIC_PRICING_ENGINE/mlruns/225581909091426701/models/m-baab3eb9a8164a9a99b0376a7d4c0c38/artifacts
+creation_timestamp: 1774453370633
+experiment_id: '225581909091426701'
+last_updated_timestamp: 1774453378898
+model_id: m-baab3eb9a8164a9a99b0376a7d4c0c38
+model_type: null
+name: model
+source_run_id: 8fd7fc19427e434f9bdc84f61b3220b3
+status: 2
+status_message: null

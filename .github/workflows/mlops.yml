@@ -3,16 +3,23 @@ name: MLOps Automated Pipeline
 on:
   push:
     branches: [ main ]
-    
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "0 */12 * * *"       # Every 12 hours automatically
+  workflow_dispatch:
+    inputs:
+      force_drift:
+        description: "Force drift to trigger retraining (true/false)"
+        required: false
+        default: "false"
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
 
-    env:
-      ALLOW_DRIFT: "true"   
+  # ══ JOB 1: Drift Detection ════════════════════════════════════════
+  drift-detection:
+    name: "01 — Evidently Drift Analysis"
+    runs-on: ubuntu-latest
+    outputs:
+      drift_detected: ${{ steps.drift_check.outputs.drift_detected }}
 
     steps:
       - name: Checkout Code
@@ -21,22 +28,102 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.10'
 
       - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pandas evidently
+        run: pip install -r requirements.txt
 
       - name: Run Drift Analysis
-        run: python generate_drift.py
+        id: drift_check
+        env:
+          DRIFT_THRESHOLD: "0.3"          # FIX: was 0.6 — too high to ever trigger
+          ALLOW_DRIFT: "false"            # FIX: was "true" — so retrain never fired
+          FORCE_DRIFT: ${{ github.event.inputs.force_drift || 'false' }}
+        run: |
+          python generate_drift.py
+          EXIT_CODE=$?
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "drift_detected=true"  >> $GITHUB_OUTPUT
+            echo "⚠️ DRIFT DETECTED — retraining will trigger"
+          else
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            echo "✅ No drift — pipeline complete, skipping retrain"
+          fi
+
+      - name: Upload Evidently Drift Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: mlops-drift-report
+          path: drift_report.html
+
+  # ══ JOB 2: Retrain — ONLY runs when drift detected ════════════════
+  retrain:
+    name: "02 — XGBoost Retrain + MLflow Log"
+    needs: drift-detection
+    if: needs.drift-detection.outputs.drift_detected == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Retrain XGBoost Model
+        run: python train_mini.py
+
+      - name: Upload Retrained Model
+        uses: actions/upload-artifact@v3
+        with:
+          name: retrained-model
+          path: model.pkl
+
+  # ══ JOB 3: Docker Build — ONLY after retrain ══════════════════════
+  build:
+    name: "03 — Docker Build & Push"
+    needs: retrain
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Retrained Model
+        uses: actions/download-artifact@v3
+        with:
+          name: retrained-model
 
       - name: Build Docker Image
         run: docker build -t mlops-app:latest .
 
-      - name: Upload Drift Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mlops-drift-report
-          path: drift_report.html
+      # Uncomment after adding DOCKER_USERNAME + DOCKER_PASSWORD to GitHub Secrets
+      # - name: Push to Docker Hub
+      #   run: |
+      #     echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+      #     docker tag mlops-app:latest ${{ secrets.DOCKER_USERNAME }}/mlops-app:latest
+      #     docker push ${{ secrets.DOCKER_USERNAME }}/mlops-app:latest
+
+  # ══ JOB 4: Kubernetes Deploy — ONLY after Docker build ════════════
+  deploy:
+    name: "04 — Kubernetes Rolling Deploy"
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Apply Kubernetes Manifests
+        run: |
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
+          kubectl apply -f ingress.yaml
+          kubectl rollout restart deployment/mlops-app -n mlops
+          kubectl rollout status deployment/mlops-app -n mlops
