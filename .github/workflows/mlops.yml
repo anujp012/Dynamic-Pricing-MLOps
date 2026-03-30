@@ -36,7 +36,7 @@ jobs:
       - name: Run Drift Analysis
         id: drift_check
         env:
-          DRIFT_THRESHOLD: "0.3"          # FIX: was 0.6 — too high to ever trigger
+          DRIFT_THRESHOLD: "0.1"          # FIX: was 0.6 — too high to ever trigger
           ALLOW_DRIFT: "false"            # FIX: was "true" — so retrain never fired
           FORCE_DRIFT: ${{ github.event.inputs.force_drift || 'false' }}
         run: |
