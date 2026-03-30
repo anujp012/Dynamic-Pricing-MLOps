@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -52,7 +52,7 @@ jobs:
 
       - name: Upload Evidently Drift Report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mlops-drift-report
           path: drift_report.html
@@ -66,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -80,7 +80,7 @@ jobs:
         run: python train_mini.py
 
       - name: Upload Retrained Model
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: retrained-model
           path: model.pkl
@@ -93,10 +93,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Download Retrained Model
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: retrained-model
 
@@ -118,7 +118,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Apply Kubernetes Manifests
         run: |
