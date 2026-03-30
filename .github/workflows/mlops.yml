@@ -18,6 +18,10 @@ jobs:
   drift-detection:
     name: "01 — Evidently Drift Analysis"
     runs-on: ubuntu-latest
+
+    env:
+      MLFLOW_TRACKING_URI: sqlite:///mlflow.db
+      MLFLOW_ARTIFACT_URI: ./mlruns
     outputs:
       drift_detected: ${{ steps.drift_check.outputs.drift_detected }}
 
@@ -63,6 +67,10 @@ jobs:
     needs: drift-detection
     if: needs.drift-detection.outputs.drift_detected == 'true'
     runs-on: ubuntu-latest
+
+    env:
+     MLFLOW_TRACKING_URI: sqlite:///mlflow.db
+     MLFLOW_ARTIFACT_URI: ./mlruns
 
     steps:
       - name: Checkout Code
