@@ -70,7 +70,7 @@ def analyze_drift():
     print(f"📊 Drift Score: {drift_score}")
 
     # FIX: Threshold lowered from 0.6 → 0.3 so drift actually triggers
-    DRIFT_THRESHOLD = float(os.getenv("DRIFT_THRESHOLD", "0.3"))
+    DRIFT_THRESHOLD = float(os.getenv("DRIFT_THRESHOLD", "0.1"))
     # FIX: ALLOW_DRIFT default is "false" so retraining actually happens
     allow_drift = os.getenv("ALLOW_DRIFT", "false").lower() == "true"
 
