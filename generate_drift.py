@@ -16,7 +16,6 @@ def generate_new_data():
     conn = sqlite3.connect("data.db")
     df = pd.read_sql("SELECT * FROM rides", conn)
 
-    # Default: minimal/no drift
     drift_factor = np.random.uniform(0.95, 1.05)
 
     # 🔥 FORCE DRIFT (for demo)
@@ -39,29 +38,25 @@ def analyze_drift():
 
     generate_new_data()
 
-    # ✅ MLflow setup (FIXED for GitHub Linux)
+    # ✅ MLflow setup (safe for GitHub)
     mlflow.set_tracking_uri("file:./mlruns")
     mlflow.set_experiment("Uber_Dynamic_Pricing")
 
-    # Load data
     conn = sqlite3.connect("data.db")
     reference = pd.read_sql("SELECT * FROM rides LIMIT 500", conn)
     current = pd.read_sql("SELECT * FROM rides ORDER BY ROWID DESC LIMIT 300", conn)
     conn.close()
 
-    # Drop unnecessary columns
     drop_cols = ["key", "pickup_datetime"]
     reference = reference.drop(columns=[c for c in drop_cols if c in reference.columns])
     current = current.drop(columns=[c for c in drop_cols if c in current.columns])
 
-    # Run Evidently
     drift_report = Report(metrics=[DataDriftPreset()])
     drift_report.run(reference_data=reference, current_data=current)
     drift_report.save_html("drift_report.html")
 
     print("✅ Evidently drift report saved: drift_report.html")
 
-    # Extract drift score
     result = drift_report.as_dict()
     drift_score = 0.0
     try:
@@ -71,14 +66,15 @@ def analyze_drift():
 
     print(f"📊 Drift Score: {drift_score}")
 
-    # Config
     DRIFT_THRESHOLD = float(os.getenv("DRIFT_THRESHOLD", "0.3"))
     allow_drift = os.getenv("ALLOW_DRIFT", "false").lower() == "true"
+
+    # 🔥 ADD THIS LINE (IMPORTANT)
     force_drift = os.getenv("FORCE_DRIFT", "false").lower() == "true"
 
     print(f"⚙️ Threshold: {DRIFT_THRESHOLD} | Allow Drift: {allow_drift}")
 
-    # ✅ MLflow logging
+    # MLflow logging
     with mlflow.start_run(run_name="drift_monitoring"):
         mlflow.log_metric("drift_score", drift_score)
         mlflow.log_param("drift_threshold", DRIFT_THRESHOLD)
@@ -89,17 +85,17 @@ def analyze_drift():
         )
         mlflow.log_artifact("drift_report.html")
 
-    # 🔥 FINAL DECISION LOGIC (FIXED)
+    # 🔥 FIXED DECISION LOGIC
     if force_drift or drift_score > DRIFT_THRESHOLD:
         print("❌ Drift detected!")
 
         if allow_drift:
-            print("⚠️ Drift allowed by config — skipping retrain")
+            print("⚠️ Drift allowed by config — continuing without retrain")
             sys.exit(0)
         else:
             print("🔁 Retraining model...")
             subprocess.run(["python", "train_mini.py"], check=True)
-            sys.exit(1)   # 👉 triggers next GitHub jobs
+            sys.exit(1)   # 👉 triggers next pipeline steps
 
     else:
         print("✅ No significant drift detected")
