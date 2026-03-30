@@ -40,8 +40,10 @@ jobs:
           ALLOW_DRIFT: "false"            # FIX: was "true" — so retrain never fired
           FORCE_DRIFT: ${{ github.event.inputs.force_drift || 'false' }}
         run: |
+         set +e
           python generate_drift.py
           EXIT_CODE=$?
+          set -e
           if [ $EXIT_CODE -eq 1 ]; then
             echo "drift_detected=true"  >> $GITHUB_OUTPUT
             echo "⚠️ DRIFT DETECTED — retraining will trigger"

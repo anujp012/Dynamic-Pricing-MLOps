@@ -90,15 +90,14 @@ def analyze_drift():
         print("❌ Drift detected!")
 
         if allow_drift:
-            print("⚠️  Drift allowed by config — continuing without retrain")
-            sys.exit(0)
+         print("⚠️  Drift allowed — continuing")
+         sys.exit(0)
         else:
-            print("🔁 Retraining model...")
-            subprocess.run(["python", "train_mini.py"], check=True)
-            sys.exit(1)   # exit(1) signals to GitHub Actions: drift was detected
+         print("🔁 Signalling GitHub Actions to retrain...")
+        sys.exit(1)   # exit(1) = signal to CI, job 02 handles retraining
     else:
-        print("✅ No significant drift detected")
-        sys.exit(0)
+        print("✅ No significant drift")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

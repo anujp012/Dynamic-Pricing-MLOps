@@ -11,8 +11,15 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # ── MLflow setup ───────────────────────────────────────────
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
+
 mlflow.set_experiment("Uber_Dynamic_Pricing")
-mlflow.xgboost.autolog(log_models=False)
+
+# 👇 Force local artifact storage
+import os
+os.environ["MLFLOW_ARTIFACT_URI"] = "./mlruns"
+
+with mlflow.start_run():
+    mlflow.log_artifact("drift_report.html")
 
 try:
     # ── Load & clean data ──────────────────────────────────
