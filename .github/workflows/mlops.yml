@@ -18,16 +18,12 @@ jobs:
   drift-detection:
     name: "01 — Evidently Drift Analysis"
     runs-on: ubuntu-latest
-
-    env:
-      MLFLOW_TRACKING_URI: sqlite:///mlflow.db
-      MLFLOW_ARTIFACT_URI: ./mlruns
     outputs:
       drift_detected: ${{ steps.drift_check.outputs.drift_detected }}
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -56,7 +52,7 @@ jobs:
 
       - name: Upload Evidently Drift Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: mlops-drift-report
           path: drift_report.html
@@ -68,13 +64,9 @@ jobs:
     if: needs.drift-detection.outputs.drift_detected == 'true'
     runs-on: ubuntu-latest
 
-    env:
-     MLFLOW_TRACKING_URI: sqlite:///mlflow.db
-     MLFLOW_ARTIFACT_URI: ./mlruns
-
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -88,7 +80,7 @@ jobs:
         run: python train_mini.py
 
       - name: Upload Retrained Model
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: retrained-model
           path: model.pkl
@@ -101,10 +93,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Download Retrained Model
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v3
         with:
           name: retrained-model
 
@@ -126,7 +118,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Apply Kubernetes Manifests
         run: |
