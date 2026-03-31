@@ -12,7 +12,7 @@ app = FastAPI(
     version="2.4.1"
 )
 
-# ── CORS: Required so your HTML frontend can call this API ──
+# ── CORS ──
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,33 +20,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Features must exactly match what train_mini.py trained on ──
-FEATURES = [
-    "pickup_longitude",
-    "pickup_latitude",
-    "dropoff_longitude",
-    "dropoff_latitude",
-    "passenger_count",
-]
-
-# ── Load model once at startup (not on every request) ──────
+# ── Load model ──
 def load_model():
     model_path = "model.pkl"
+    feature_path = "features.pkl"
+
     if not os.path.exists(model_path):
         raise FileNotFoundError("model.pkl not found. Run train_mini.py first.")
-    return joblib.load(model_path)
 
-model = load_model()
+    if not os.path.exists(feature_path):
+        raise FileNotFoundError("features.pkl not found. Run train_mini.py first.")
 
-# ── Request schema ─────────────────────────────────────────
+    model = joblib.load(model_path)
+    features = joblib.load(feature_path)
+
+    return model, features
+
+model, FEATURES = load_model()
+
+# ── Request schema ──
 class PredictionRequest(BaseModel):
     pickup_longitude: float
     pickup_latitude: float
     dropoff_longitude: float
     dropoff_latitude: float
     passenger_count: float
+    active_drivers: int
 
-# ── ENDPOINTS ──────────────────────────────────────────────
+    demand_zone: str
+    weather: str
+    event_nearby: int
+    time_of_day: str
+
+# ── ENDPOINTS ──
 
 @app.get("/")
 def health():
@@ -61,39 +67,104 @@ def health():
 def predict(request: PredictionRequest):
     try:
         data = request.dict()
+
+        valid_zones = ["city_center", "airport", "suburb", "industrial"]
+        valid_weather = ["clear", "rainy", "fog", "storm"]
+        valid_time = ["morning", "afternoon", "night"]
+
+        if data["demand_zone"] not in valid_zones:
+            raise HTTPException(status_code=400, detail="Invalid demand_zone")
+
+        if data["weather"] not in valid_weather:
+            raise HTTPException(status_code=400, detail="Invalid weather")
+
+        if data["time_of_day"] not in valid_time:
+            raise HTTPException(status_code=400, detail="Invalid time_of_day")
+
+        if data["active_drivers"] < 0:
+            raise HTTPException(status_code=400, detail="active_drivers must be >= 0")
+
+        # Convert to DataFrame
         df = pd.DataFrame([data])
-        df = df[FEATURES].astype(float)
 
+        # Rename to match training columns
+        df = df.rename(columns={
+            "demand_zone": "zone",
+            "event_nearby": "event"
+        })
+
+        # Convert event (0/1 → yes/no)
+        df["event"] = df["event"].map({1: "yes", 0: "no"}).fillna("no")
+
+        # One-hot encoding
+        df = pd.get_dummies(df)
+
+        # Align with training features
+        df = df.reindex(columns=FEATURES, fill_value=0)
+
+        df = df.astype(float)
+
+        # ✅ ML prediction
         prediction = model.predict(df)
-        fare = round(float(prediction[0]), 2)
+        base_fare = round(float(prediction[0]), 2)
 
-        # Surge multiplier relative to base fare
-        BASE_FARE = 8.0
-        surge = round(max(1.0, fare / BASE_FARE), 2)
+        # 🔥 HYBRID SURGE LOGIC
+        surge = 1.0
 
-        # Log prediction to SQLite for monitoring
+        if request.demand_zone == "airport":
+            surge += 0.4
+        elif request.demand_zone == "city_center":
+            surge += 0.2
+
+        if request.weather == "rainy":
+            surge += 0.5
+        elif request.weather == "storm":
+            surge += 0.7
+        elif request.weather == "fog":
+            surge += 0.2
+
+        if request.event_nearby == 1:
+            surge += 0.3
+
+        if request.active_drivers < 5:
+            surge += 0.6
+        elif request.active_drivers < 10:
+            surge += 0.3
+
+        if request.time_of_day == "night":
+            surge += 0.3
+        elif request.time_of_day == "morning":
+            surge += 0.1
+
+        # ✅ Final fare
+        final_fare = round(base_fare * surge, 2)
+
+        # ✅ Logging
         try:
             conn = sqlite3.connect("data.db")
             log_df = df.copy()
-            log_df["predicted_fare"] = fare
+            log_df["base_fare"] = base_fare
+            log_df["predicted_fare"] = final_fare
             log_df["surge_multiplier"] = surge
             log_df.to_sql("predictions_log", conn, if_exists="append", index=False)
             conn.close()
         except Exception:
-            pass  # Don't fail the prediction if logging fails
+            pass
 
         return {
-            "predicted_fare": fare,
-            "surge_multiplier": surge,
+            "predicted_fare": final_fare,
+            "base_fare": base_fare,
+            "surge_multiplier": round(surge, 2),
             "status": "success",
             "model_version": "Price_Prediction_Engine/latest"
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/metrics/performance")
 def get_performance():
-    """Returns latest RMSE/MAE metrics logged by train_mini.py"""
     try:
         conn = sqlite3.connect("mlflow.db")
         df = pd.read_sql("""
@@ -109,9 +180,9 @@ def get_performance():
     except Exception as e:
         return {"metrics": [], "error": str(e)}
 
+
 @app.get("/metrics/drift")
 def get_drift():
-    """Returns current drift status and row count from data.db"""
     try:
         conn = sqlite3.connect("data.db")
         count_df = pd.read_sql("SELECT COUNT(*) as total_rows FROM rides", conn)
@@ -126,12 +197,13 @@ def get_drift():
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
+
 @app.get("/pipeline/status")
 def get_pipeline_status():
-    """Returns last pipeline run result written by train_mini.py"""
     status_file = "pipeline_status.txt"
     if os.path.exists(status_file):
         with open(status_file) as f:
             content = f.read().strip()
         return {"status": content}
     return {"status": "No pipeline run recorded yet. Push to GitHub to trigger."}
+

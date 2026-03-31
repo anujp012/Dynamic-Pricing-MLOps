@@ -11,7 +11,6 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # ── MLflow setup ───────────────────────────────────────────
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
-
 mlflow.set_experiment("Uber_Dynamic_Pricing")
 
 # 👇 Force local artifact storage
@@ -26,24 +25,51 @@ try:
     data = pd.read_csv("uber.csv")
     data = data.dropna(subset=["fare_amount"])
     data = data[data["fare_amount"] > 0]
-    data = data[data["fare_amount"] < 200]    # remove outliers
+    data = data[data["fare_amount"] < 200]
     data = data[data["passenger_count"] > 0]
     data = data[data["passenger_count"] <= 6]
 
+    # ── ADD: Synthetic real-world features ─────────────────
+    demand_zones = ["city_centre", "airport", "suburb", "industrial"]
+    weather_types = ["clear", "rainy", "fog", "storm"]
+    time_types = ["morning", "afternoon", "night"]
+
+    data["demand_zone"] = np.random.choice(demand_zones, len(data))
+    data["weather"] = np.random.choice(weather_types, len(data))
+    data["event_nearby"] = np.random.choice([0, 1], len(data))   # ✅ numeric (better)
+    data["time_of_day"] = np.random.choice(time_types, len(data))
+
+    # numeric feature
+    data["active_drivers"] = np.random.randint(1, 50, len(data))
+
     target_col = "fare_amount"
 
-    # FIX: Features exactly match api.py FEATURES list
+    # Base features
     feature_cols = [
         "pickup_longitude",
         "pickup_latitude",
         "dropoff_longitude",
         "dropoff_latitude",
-        "passenger_count"
+        "passenger_count",
+        "active_drivers"
     ]
 
     X = data[feature_cols].copy()
+
+    # ── ADD: One-hot encoding ──────────────────────────────
+    categorical_cols = ["demand_zone", "weather", "time_of_day"]
+    
+    data_encoded = pd.get_dummies(
+        data[categorical_cols],
+        drop_first=False   # ✅ keep all categories (safer for API)
+    )
+
+    # event_nearby already numeric → add directly
+    X = pd.concat([X, data_encoded, data[["event_nearby"]]], axis=1)
+
     y = data[target_col]
 
+    # Ensure numeric
     for col in X.columns:
         X[col] = X[col].astype(float)
     X = X.fillna(0)
@@ -56,7 +82,6 @@ try:
             X, y, test_size=0.2, random_state=42
         )
 
-        # FIX: n_estimators 50 → 300, added 3 regularization params
         params = {
             "n_estimators":     300,
             "objective":        "reg:squarederror",
@@ -74,7 +99,6 @@ try:
 
         preds = model.predict(X_test)
 
-        # FIX: Log 4 metrics instead of just RMSE
         rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
         mae  = float(mean_absolute_error(y_test, preds))
         r2   = float(r2_score(y_test, preds))
@@ -95,6 +119,10 @@ try:
             registered_model_name="Price_Prediction_Engine"
         )
         print("✅ Model registered: Price_Prediction_Engine")
+
+        # ── SAVE feature columns (CRITICAL FOR API) ─────────
+        joblib.dump(X.columns.tolist(), "features.pkl")
+        print("✅ features.pkl saved")
 
         joblib.dump(model, "model.pkl")
         print("✅ model.pkl saved")

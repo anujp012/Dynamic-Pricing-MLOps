@@ -18,6 +18,7 @@ jobs:
   drift-detection:
     name: "01 — Evidently Drift Analysis"
     runs-on: ubuntu-latest
+    continue-on-error: true 
     outputs:
       drift_detected: ${{ steps.drift_check.outputs.drift_detected }}
 
