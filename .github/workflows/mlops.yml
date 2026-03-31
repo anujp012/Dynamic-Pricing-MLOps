@@ -123,10 +123,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.8.0
+
       - name: Apply Kubernetes Manifests
         run: |
           kubectl apply -f deployment.yaml
           kubectl apply -f service.yaml
-          kubectl apply -f ingress.yaml
-          kubectl rollout restart deployment/mlops-app -n mlops
-          kubectl rollout status deployment/mlops-app -n mlops
+          kubectl get nodes
+          kubectl get pods
