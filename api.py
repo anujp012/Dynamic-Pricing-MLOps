@@ -6,6 +6,8 @@ import pandas as pd
 import sqlite3
 import os
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title="Uber Dynamic Pricing Engine",
     description="XGBoost-based surge pricing with MLflow + Evidently MLOps pipeline",
@@ -68,7 +70,7 @@ def predict(request: PredictionRequest):
     try:
         data = request.dict()
 
-        valid_zones = ["city_center", "airport", "suburb", "industrial"]
+        valid_zones = ["city_centre", "airport", "suburb", "industrial"]
         valid_weather = ["clear", "rainy", "fog", "storm"]
         valid_time = ["morning", "afternoon", "night"]
 

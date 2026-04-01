@@ -128,6 +128,7 @@ jobs:
 
       - name: Apply Kubernetes Manifests
         run: |
+          kubectl create namespace mlops --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply -f deployment.yaml
           kubectl apply -f service.yaml
           kubectl get nodes
