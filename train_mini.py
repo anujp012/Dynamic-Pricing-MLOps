@@ -18,6 +18,7 @@ import os
 os.environ["MLFLOW_ARTIFACT_URI"] = "./mlruns"
 
 with mlflow.start_run():
+  if os.path.exists("drift_report.html"):
     mlflow.log_artifact("drift_report.html")
 
 try:
