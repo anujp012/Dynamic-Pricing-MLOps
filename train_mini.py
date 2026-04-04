@@ -30,19 +30,66 @@ try:
     data = data[data["passenger_count"] <= 6]
 
     # ── ADD: Synthetic real-world features ─────────────────
-    demand_zones = ["city_centre", "airport", "suburb", "industrial"]
+    demand_zones  = ["city_centre", "airport", "suburb", "industrial"]
     weather_types = ["clear", "rainy", "fog", "storm"]
-    time_types = ["morning", "afternoon", "night"]
+    time_types    = ["morning", "afternoon", "night"]
 
-    data["demand_zone"] = np.random.choice(demand_zones, len(data))
-    data["weather"] = np.random.choice(weather_types, len(data))
-    data["event_nearby"] = np.random.choice([0, 1], len(data))   # ✅ numeric (better)
-    data["time_of_day"] = np.random.choice(time_types, len(data))
+    # FIX: Correlated assignment — features now reflect fare_amount
+    # so the model actually learns meaningful relationships
+    def assign_zone(fare):
+        if fare > 30:   return "airport"
+        elif fare > 20: return "city_centre"
+        elif fare > 12: return "suburb"
+        else:           return "industrial"
 
-    # numeric feature
-    data["active_drivers"] = np.random.randint(1, 50, len(data))
+    def assign_weather(fare):
+        if fare > 25:   return "storm"
+        elif fare > 18: return "rainy"
+        elif fare > 14: return "fog"
+        else:           return "clear"
 
-    target_col = "fare_amount"
+    def assign_time(fare):
+        if fare > 22:   return "night"
+        elif fare > 14: return "morning"
+        else:           return "afternoon"
+
+    def assign_event(fare):
+        # Higher fares more likely to have a nearby event
+        prob = min((fare - 5) / 40, 0.9) if fare > 5 else 0.1
+        return int(np.random.random() < prob)
+
+    data["demand_zone"]  = data["fare_amount"].apply(assign_zone)
+    data["weather"]      = data["fare_amount"].apply(assign_weather)
+    data["time_of_day"]  = data["fare_amount"].apply(assign_time)
+    data["event_nearby"] = data["fare_amount"].apply(assign_event)  # ✅ numeric (better)
+
+    # numeric feature — low driver count correlates with higher fares
+    data["active_drivers"] = data["fare_amount"].apply(
+        lambda f: max(1, int(np.random.normal(loc=max(2, 25 - f * 0.6), scale=3)))
+    )
+
+    # ── FIX 3: Model learns surge from data — no hardcoded rules needed ──
+    # compute_surge mirrors the same logic that was in api.py if-else block
+    # Now we bake surge into the training target so XGBoost learns it directly
+    def compute_surge(row):
+        surge = 1.0
+        if row["demand_zone"] == "airport":         surge += 0.4
+        elif row["demand_zone"] == "city_centre":   surge += 0.2
+        if row["weather"] == "storm":               surge += 0.7
+        elif row["weather"] == "rainy":             surge += 0.5
+        elif row["weather"] == "fog":               surge += 0.2
+        if row["time_of_day"] == "night":           surge += 0.3
+        elif row["time_of_day"] == "morning":       surge += 0.1
+        if row["active_drivers"] < 5:               surge += 0.6
+        elif row["active_drivers"] < 10:            surge += 0.3
+        return surge
+
+    data["surge_multiplier"] = data.apply(compute_surge, axis=1)
+    data["final_fare"]       = data["fare_amount"] * data["surge_multiplier"]
+
+    # FIX 3: Train on final_fare (surge-included) instead of bare fare_amount
+    # This means the model itself predicts the surge pricing — not hardcoded rules
+    target_col = "final_fare"   # was "fare_amount"
 
     # Base features
     feature_cols = [
@@ -58,7 +105,7 @@ try:
 
     # ── ADD: One-hot encoding ──────────────────────────────
     categorical_cols = ["demand_zone", "weather", "time_of_day"]
-    
+
     data_encoded = pd.get_dummies(
         data[categorical_cols],
         drop_first=False   # ✅ keep all categories (safer for API)

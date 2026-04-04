@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dynamic Pricing Engine</title>
+
+  <!-- Google Fonts: Playfair Display + IBM Plex Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Leaflet CSS (free map, no API key) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- Our stylesheet -->
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+  <!-- ═══════════════ SIDEBAR ═══════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-mark">DPE</span>
+      <div class="logo-text">
+        <strong>Dynamic Pricing</strong>
+        <span>Engine v2.4.1</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#predict"     class="nav-item active" data-section="predict">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        Prediction
+      </a>
+      <a href="#performance" class="nav-item" data-section="performance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+        Performance
+      </a>
+      <a href="#drift"       class="nav-item" data-section="drift">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        Drift Monitor
+      </a>
+      <a href="#pipeline"    class="nav-item" data-section="pipeline">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        CI/CD Pipeline
+      </a>
+    </nav>
+
+    <div class="sidebar-stack">
+      <p class="stack-label">Tech Stack</p>
+      <div class="stack-tags">
+        <span>XGBoost</span>
+        <span>MLflow</span>
+        <span>Evidently</span>
+        <span>FastAPI</span>
+        <span>Docker</span>
+        <span>Kubernetes</span>
+        <span>SQLite</span>
+        <span>GitHub Actions</span>
+      </div>
+    </div>
+
+    <div class="api-config">
+      <label>API Endpoint</label>
+      <input type="text" id="api-url" value="http://localhost:8000" spellcheck="false"/>
+    </div>
+  </aside>
+
+  <!-- ═══════════════ MAIN ═══════════════ -->
+  <main class="main-content">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>Uber Dynamic Pricing Engine</h1>
+        <p>XGBoost · MLflow · Evidently AI · FastAPI · SQLite · Kubernetes</p>
+      </div>
+      <div class="topbar-status">
+        <div class="status-dot" id="api-status-dot"></div>
+        <span id="api-status-text">Connecting...</span>
+        <span class="topbar-time" id="topbar-time">--:--:--</span>
+      </div>
+    </header>
+
+    <!-- KPI Cards -->
+    <section class="kpi-row">
+      <div class="kpi-card">
+        <span class="kpi-label">Surge Multiplier</span>
+        <span class="kpi-value accent" id="kpi-surge">—</span>
+        <span class="kpi-hint">Last prediction</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Final Fare</span>
+        <span class="kpi-value green" id="kpi-fare">—</span>
+        <span class="kpi-hint">XGBoost + surge logic</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">SQLite Rows</span>
+        <span class="kpi-value blue" id="kpi-rows">—</span>
+        <span class="kpi-hint" id="kpi-db-hint">Fetching...</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Pipeline Status</span>
+        <span class="kpi-value" id="kpi-pipeline" style="font-size:1rem;padding-top:4px">—</span>
+        <span class="kpi-hint" id="kpi-pipeline-hint">Checking...</span>
+      </div>
+    </section>
+
+    <!-- ══ SECTION 1: PREDICTION ══ -->
+    <section class="section" id="predict">
+      <div class="section-header">
+        <div class="section-number">01</div>
+        <div>
+          <h2>Live Price Prediction</h2>
+          <p>POST /predict · OpenStreetMap · Haversine Distance Formula</p>
+        </div>
+      </div>
+
+      <div class="predict-layout">
+
+        <!-- Form panel -->
+        <div class="form-panel card">
+          <h3 class="card-title">Set Pickup &amp; Dropoff</h3>
+
+          <!-- Address search row -->
+          <div class="addr-row">
+            <div class="addr-group">
+              <label><span class="marker-dot pickup"></span> Pickup Location</label>
+              <div class="autocomplete-wrap">
+                <input type="text" id="pickup-input" placeholder="Search address..." autocomplete="off" oninput="onSearch('pickup')"/>
+                <ul class="suggest-list" id="pickup-list"></ul>
+              </div>
+            </div>
+            <div class="addr-group">
+              <label><span class="marker-dot dropoff"></span> Dropoff Location</label>
+              <div class="autocomplete-wrap">
+                <input type="text" id="dropoff-input" placeholder="Search address..." autocomplete="off" oninput="onSearch('dropoff')"/>
+                <ul class="suggest-list" id="dropoff-list"></ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Map -->
+          <div id="map"></div>
+          <div class="map-hint">
+            <span>Click map: <b>1st click = Pickup</b> · <b>2nd click = Dropoff</b></span>
+            <span id="map-mode-label" class="map-mode">Mode: Set Pickup</span>
+          </div>
+
+          <!-- Distance badge -->
+          <div class="dist-badge hidden" id="dist-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            Distance: <strong id="dist-km">—</strong> km &nbsp;·&nbsp; Est. <strong id="dist-min">—</strong> min
+          </div>
+
+          <!-- Input fields -->
+          <div class="field-grid">
+            <div class="field">
+              <label>Passengers</label>
+              <input type="number" id="f-pax" value="2" min="1" max="6"/>
+            </div>
+            <div class="field">
+              <label>Active Drivers Nearby</label>
+              <input type="number" id="f-drivers" value="4" min="0"/>
+            </div>
+            <div class="field">
+              <label>Demand Zone</label>
+              <select id="f-zone">
+                <option value="city_centre" selected>City Centre</option>
+                <option value="airport">Airport</option>
+                <option value="suburb">Suburb</option>
+                <option value="industrial">Industrial</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Weather</label>
+              <select id="f-weather">
+                <option value="clear">Clear</option>
+                <option value="rainy" selected>Rainy</option>
+                <option value="fog">Foggy</option>
+                <option value="storm">Storm</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Time of Day</label>
+              <select id="f-time">
+                <option value="morning">Morning</option>
+                <option value="afternoon" selected>Afternoon</option>
+                <option value="night">Night</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Event Nearby</label>
+              <select id="f-event">
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+              </select>
+            </div>
+          </div>
+
+          <button class="btn-primary" id="predict-btn" onclick="runPrediction()">
+            <span id="btn-text">Get Surge Price</span>
+            <span class="btn-spinner hidden" id="btn-spinner"></span>
+          </button>
+
+          <!-- Error -->
+          <div class="alert-error hidden" id="error-box"></div>
+
+          <!-- Result -->
+          <div class="result-panel hidden" id="result-panel">
+            <div class="result-row">
+              <div class="result-fare" id="r-fare">$0.00</div>
+              <div class="result-meta-grid">
+                <div><span class="result-lbl">Surge</span><span class="result-val-sm accent" id="r-surge">1.0×</span></div>
+                <div><span class="result-lbl">Base Fare</span><span class="result-val-sm green" id="r-base">$0.00</span></div>
+                <div><span class="result-lbl">Distance</span><span class="result-val-sm blue" id="r-dist">—</span></div>
+              </div>
+            </div>
+            <div class="surge-meter">
+              <div class="surge-labels"><span>No Surge</span><span>Moderate</span><span>Extreme</span></div>
+              <div class="surge-track"><div class="surge-fill" id="surge-fill"></div></div>
+            </div>
+            <p class="result-footnote" id="r-footnote">—</p>
+          </div>
+        </div>
+
+        <!-- Charts panel -->
+        <div class="charts-column">
+          <div class="card chart-card">
+            <h3 class="card-title">Surge History</h3>
+            <div class="chart-area"><canvas id="ch-history"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <h3 class="card-title">Avg Fare by Zone</h3>
+            <div class="chart-area small"><canvas id="ch-zone"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <h3 class="card-title">Surge by Weather</h3>
+            <div class="chart-area small"><canvas id="ch-weather"></canvas></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ══ SECTION 2: PERFORMANCE ══ -->
+    <section class="section" id="performance">
+      <div class="section-header">
+        <div class="section-number">02</div>
+        <div>
+          <h2>Model Performance</h2>
+          <p>GET /metrics/performance · MLflow Model Registry · XGBoost</p>
+        </div>
+      </div>
+
+      <div class="three-col">
+        <div class="card chart-card">
+          <h3 class="card-title">RMSE &amp; MAE Across Versions</h3>
+          <div class="chart-area"><canvas id="ch-rmse"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h3 class="card-title">Feature Importance</h3>
+          <div class="chart-area"><canvas id="ch-fi"></canvas></div>
+        </div>
+        <div class="card">
+          <h3 class="card-title">Model Registry</h3>
+          <table class="data-table">
+            <thead>
+              <tr><th>Version</th><th>RMSE</th><th>R²</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>v2.4.1</td><td class="green">$4.71</td><td class="green">0.77</td><td><span class="tag live">LIVE</span></td></tr>
+              <tr><td>v2.3.9</td><td>$5.10</td><td>0.72</td><td><span class="tag shadow">SHADOW</span></td></tr>
+              <tr><td>v2.2.0</td><td>$5.84</td><td>0.68</td><td><span class="tag archive">ARCHIVE</span></td></tr>
+              <tr><td>v2.1.0</td><td>$6.40</td><td>0.61</td><td><span class="tag deprecated">DEPR</span></td></tr>
+            </tbody>
+          </table>
+          <div class="live-metric">
+            <span class="kpi-label">Live RMSE from MLflow</span>
+            <span class="live-rmse" id="live-rmse">—</span>
+            <span class="kpi-hint">Read from /metrics/performance</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SECTION 3: DRIFT ══ -->
+    <section class="section" id="drift">
+      <div class="section-header">
+        <div class="section-number">03</div>
+        <div>
+          <h2>Evidently Drift Monitoring</h2>
+          <p>GET /metrics/drift · SQLite · PSI Scores · Auto-Retrain on Threshold</p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 class="card-title">PSI Per Feature</h3>
+          <div id="drift-bars"></div>
+          <div class="drift-legend">
+            <span class="legend-item safe">Safe &lt;0.10</span>
+            <span class="legend-item watch">Watch 0.10–0.20</span>
+            <span class="legend-item alert">Alert &gt;0.20</span>
+          </div>
+          <div class="drift-live-stats">
+            <div><span class="kpi-label">Rides in DB</span><span class="kpi-value blue" id="live-rows">—</span></div>
+            <div><span class="kpi-label">Predictions Logged</span><span class="kpi-value green" id="live-preds">—</span></div>
+            <div><span class="kpi-label">Threshold</span><span class="kpi-value accent" id="live-thresh">—</span></div>
+          </div>
+        </div>
+        <div class="card chart-card">
+          <h3 class="card-title">Drift Score Trend — 7 Days</h3>
+          <div class="chart-area"><canvas id="ch-drift"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SECTION 4: PIPELINE ══ -->
+    <section class="section" id="pipeline">
+      <div class="section-header">
+        <div class="section-number">04</div>
+        <div>
+          <h2>CI/CD Pipeline</h2>
+          <p>GitHub Actions · 4-Stage Conditional · Drift-Triggered Retraining</p>
+        </div>
+      </div>
+
+      <div class="card pipeline-card">
+        <div class="pipeline-stages" id="pipeline-stages"></div>
+        <div class="pipeline-meta">
+          <span>Trigger: <strong>drift-alert / cron</strong></span>
+          <span>Runner: <strong>ubuntu-latest</strong></span>
+          <span>Branch: <strong>main</strong></span>
+          <span>Uptime: <strong id="pipe-timer">0m 00s</strong></span>
+          <span>Status: <strong class="green" id="pipe-status">—</strong></span>
+        </div>
+        <div class="log-stream" id="log-stream"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- External libraries -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Our JavaScript -->
+  <script src="app.js"></script>
+</body>
+</html>
