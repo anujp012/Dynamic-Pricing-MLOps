@@ -22,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── FIX 4: API Key Authentication ─────────────────────────
+
 API_KEY        = os.getenv("API_KEY", "mlops-demo-key-2024")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -31,7 +31,7 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
         raise HTTPException(status_code=403, detail="Invalid or missing API Key")
     return api_key
 
-# ── FIX 4: MLflow model loading (pulls latest from registry) ──
+
 def load_model():
     try:
         import mlflow
@@ -64,7 +64,7 @@ class PredictionRequest(BaseModel):
     event_nearby:      int
     time_of_day:       str
 
-# ── reads actual column names from any table ──
+
 def get_columns(conn, table):
     try:
         cur = conn.execute(f"PRAGMA table_info({table})")
@@ -72,7 +72,7 @@ def get_columns(conn, table):
     except Exception:
         return []
 
-# ── FIX 6: SQLite concurrent write safety with retry logic ──
+
 def log_to_db(log_row, retries=3):
     for attempt in range(retries):
         try:
@@ -82,7 +82,7 @@ def log_to_db(log_row, retries=3):
             return True
         except sqlite3.OperationalError as e:
             if "locked" in str(e) and attempt < retries - 1:
-                time.sleep(0.5 * (attempt + 1))  # exponential backoff and retry
+                time.sleep(0.5 * (attempt + 1))  
                 continue
             return False
         except Exception:
@@ -122,14 +122,12 @@ def predict(request: PredictionRequest, api_key: str = Security(verify_api_key))
 
         prediction = model.predict(df)
 
-        # FIX 3: Model now predicts surge-included final fare directly
-        # (trained on final_fare = fare_amount * surge_multiplier)
-        # No hardcoded surge if-else block needed anymore
+        
         final_fare = round(float(prediction[0]), 2)
-        base_fare  = round(final_fare / 1.5, 2)           # estimated base for display
+        base_fare  = round(final_fare / 1.5, 2)           
         surge      = round(final_fare / base_fare, 2) if base_fare > 0 else 1.0
 
-        # FIX 6: Use retry-safe DB logger instead of direct write
+        
         log_row = pd.DataFrame([{
             "pickup_longitude":  request.pickup_longitude,
             "pickup_latitude":   request.pickup_latitude,
@@ -168,7 +166,7 @@ def get_performance():
         "error":              None
     }
 
-    # ── 1. Feature importance from XGBoost model (always available) ──
+    
     try:
         if hasattr(model, "feature_importances_"):
             fi_pairs = sorted(
@@ -182,10 +180,10 @@ def get_performance():
     except Exception as e:
         result["error"] = f"FI error: {str(e)}"
 
-    # ── 2. MLflow version history ──
+    
     try:
         import mlflow
-        mlflow.set_tracking_uri("sqlite:///mlflow.db")   # FIX: matches train_mini.py
+        mlflow.set_tracking_uri("sqlite:///mlflow.db")   
         client   = mlflow.tracking.MlflowClient()
         all_runs = []
         for exp in client.search_experiments():
@@ -197,7 +195,7 @@ def get_performance():
 
         all_runs.sort(key=lambda r: r.info.start_time)
 
-        # Only runs that have rmse or mae logged
+        
         scored = [
             r for r in all_runs
             if any(k in r.data.metrics for k in ["rmse", "RMSE", "mae", "MAE"])
@@ -233,7 +231,7 @@ def get_performance():
     except Exception as e:
         result["error"] = (result["error"] or "") + f" | MLflow: {str(e)}"
 
-    # ── 3. Fallback: compute metrics from rides table (always has 200k rows) ──
+    
     if not result["versions"]:
         try:
             conn = sqlite3.connect("data.db")
@@ -291,7 +289,7 @@ def get_drift():
         except Exception:
             pass
 
-        # ── Real PSI per feature ──
+        
         psi_scores   = []
         numeric_cols = ["fare_amount", "passenger_count",
                         "pickup_longitude", "pickup_latitude", "active_drivers"]
@@ -299,8 +297,7 @@ def get_drift():
         try:
             reference = pd.read_sql("SELECT * FROM rides LIMIT 500", conn)
 
-            # FIX 2: Use live_data.csv as current if available — genuinely
-            # different distribution from training data
+            
             if os.path.exists("live_data.csv"):
                 current = pd.read_csv("live_data.csv")
             else:
@@ -335,11 +332,11 @@ def get_drift():
 
         conn.close()
 
-        # ── 7-day drift trend from MLflow ──
+        
         drift_trend = []
         try:
             import mlflow, datetime
-            mlflow.set_tracking_uri("sqlite:///mlflow.db")   # FIX: matches train_mini.py
+            mlflow.set_tracking_uri("sqlite:///mlflow.db")   
             client = mlflow.tracking.MlflowClient()
             for exp in client.search_experiments():
                 runs = client.search_runs(

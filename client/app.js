@@ -1,41 +1,22 @@
-/* ═══════════════════════════════════════════════
-   DYNAMIC PRICING ENGINE — app.js
-   Sections:
-     1. Utilities
-     2. Clock
-     3. Map Setup (Leaflet + OpenStreetMap)
-     4. Address Search (Nominatim — free, no key)
-     5. Chart Setup (Chart.js)
-     6. Drift Bars  ← now fetched from /metrics/drift
-     7. Pipeline Stages
-     8. Log Stream
-     9. Prediction API Call
-    10. Live API Polling  ← Performance + Drift charts now live
-═══════════════════════════════════════════════ */
+
 
 'use strict';
 
-/* ═══════════════════════════════════════════════
-   1. UTILITIES
-═══════════════════════════════════════════════ */
+
 const $ = id => document.getElementById(id);
 const API = () => $('api-url').value.trim().replace(/\/$/, '');
 
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 
-/* ═══════════════════════════════════════════════
-   2. CLOCK
-═══════════════════════════════════════════════ */
+
 function updateClock() {
   $('topbar-time').textContent = new Date().toLocaleTimeString('en-GB');
 }
 updateClock();
 setInterval(updateClock, 1000);
 
-/* ═══════════════════════════════════════════════
-   3. MAP SETUP
-═══════════════════════════════════════════════ */
+
 const map = L.map('map', { zoomControl: true }).setView([40.748, -73.986], 12);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -112,9 +93,7 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/* ═══════════════════════════════════════════════
-   4. ADDRESS SEARCH
-═══════════════════════════════════════════════ */
+
 const searchTimers = {};
 
 function onSearch(type) {
@@ -178,9 +157,7 @@ document.addEventListener('click', e => {
   });
 });
 
-/* ═══════════════════════════════════════════════
-   5. CHARTS (Chart.js)
-═══════════════════════════════════════════════ */
+
 Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
 Chart.defaults.font.size   = 11;
 Chart.defaults.color       = '#8a94a6';
@@ -208,7 +185,7 @@ const histChart = new Chart($('ch-history'), {
   }
 });
 
-// ── Zone chart (live, updated per prediction) ──
+
 const zoneAccum = { city_centre: [], airport: [], suburb: [], industrial: [] };
 const zoneChart = new Chart($('ch-zone'), {
   type: 'bar',
@@ -231,7 +208,7 @@ const zoneChart = new Chart($('ch-zone'), {
   }
 });
 
-// ── Weather chart (live, updated per prediction) ──
+
 const weatherAccum = { clear: [], rainy: [], fog: [], storm: [] };
 const weatherChart = new Chart($('ch-weather'), {
   type: 'bar',
@@ -251,7 +228,7 @@ const weatherChart = new Chart($('ch-weather'), {
   }
 });
 
-// ── RMSE/MAE chart — populated from /metrics/performance ──
+
 const rmseChart = new Chart($('ch-rmse'), {
   type: 'line',
   data: {
@@ -283,7 +260,7 @@ const rmseChart = new Chart($('ch-rmse'), {
   }
 });
 
-// ── Feature importance chart — populated from /metrics/performance ──
+
 const fiChart = new Chart($('ch-fi'), {
   type: 'bar',
   data: {
@@ -306,7 +283,7 @@ const fiChart = new Chart($('ch-fi'), {
   }
 });
 
-// ── Drift trend chart — populated from /metrics/drift ──
+
 const driftTrendChart = new Chart($('ch-drift'), {
   type: 'line',
   data: {
@@ -338,10 +315,7 @@ const driftTrendChart = new Chart($('ch-drift'), {
   }
 });
 
-/* ═══════════════════════════════════════════════
-   6. DRIFT BARS — rendered from /metrics/drift data
-   Called by fetchDriftMetrics() after API response
-═══════════════════════════════════════════════ */
+
 function renderDriftBars(psiFeatures) {
   const container = $('drift-bars');
   if (!container) return;
@@ -367,9 +341,7 @@ function renderDriftBars(psiFeatures) {
   });
 }
 
-/* ═══════════════════════════════════════════════
-   7. PIPELINE STAGES
-═══════════════════════════════════════════════ */
+
 const STAGES = [
   { name: 'Checkout',     icon: '📥', st: 'pass', time: '11s' },
   { name: 'Drift Check',  icon: '🔍', st: 'pass', time: '1m 21s' },
@@ -406,9 +378,7 @@ setInterval(() => {
   $('pipe-timer').textContent = `${m}m ${s}s`;
 }, 1000);
 
-/* ═══════════════════════════════════════════════
-   8. LOG STREAM
-═══════════════════════════════════════════════ */
+
 const logEl = $('log-stream');
 const INIT_LOGS = [
   ['info', 'Dashboard initialized · OpenStreetMap ready (free, no API key)'],
@@ -437,9 +407,7 @@ function drainInitLogs() {
 }
 setTimeout(drainInitLogs, 800);
 
-/* ═══════════════════════════════════════════════
-   9. PREDICTION
-═══════════════════════════════════════════════ */
+
 async function runPrediction() {
   const btn    = $('predict-btn');
   const errBox = $('error-box');
@@ -473,7 +441,7 @@ async function runPrediction() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': 'mlops-demo-key-2024',        // FIX 5: API key authentication
+        'X-API-Key': 'mlops-demo-key-2024',        
       },
       body: JSON.stringify(payload),
     });
@@ -503,13 +471,13 @@ async function runPrediction() {
     $('kpi-surge').textContent = `${surge}×`;
     $('kpi-fare').textContent  = `$${finalFare.toFixed(2)}`;
 
-    // Update surge history chart
+    
     const t = new Date().toLocaleTimeString('en-GB').slice(0, 5);
     hLabels.push(t); hData.push(surge);
     if (hLabels.length > 15) { hLabels.shift(); hData.shift(); }
     histChart.update();
 
-    // Update zone chart
+    
     const zoneIdx = { city_centre: 0, airport: 1, suburb: 2, industrial: 3 };
     const zi = zoneIdx[payload.demand_zone];
     if (zi !== undefined) {
@@ -519,7 +487,7 @@ async function runPrediction() {
       zoneChart.update();
     }
 
-    // Update weather chart
+    
     const weatherIdx = { clear: 0, rainy: 1, fog: 2, storm: 3 };
     const wi = weatherIdx[payload.weather];
     if (wi !== undefined) {
@@ -531,7 +499,7 @@ async function runPrediction() {
 
     appendLog('ok', `Prediction → Fare=$${finalFare.toFixed(2)} Surge=${surge}× Zone=${payload.demand_zone} Weather=${payload.weather}`);
 
-    // Refresh drift metrics after each prediction (new data logged)
+    
     setTimeout(fetchDriftMetrics, 2000);
 
   } catch (err) {
@@ -545,9 +513,7 @@ async function runPrediction() {
   }
 }
 
-/* ═══════════════════════════════════════════════
-   10. LIVE API POLLING — all charts now fetch real data
-═══════════════════════════════════════════════ */
+
 
 async function checkApiHealth() {
   try {
@@ -562,7 +528,7 @@ async function checkApiHealth() {
   }
 }
 
-// ── Fetch /metrics/drift → updates PSI bars + drift trend chart + KPI cards ──
+
 async function fetchDriftMetrics() {
   try {
     const data = await fetch(`${API()}/metrics/drift`).then(r => r.json());
@@ -574,11 +540,11 @@ async function fetchDriftMetrics() {
     $('live-preds').textContent  = data.predictions_logged?.toLocaleString() ?? '—';
     $('live-thresh').textContent = data.threshold                            ?? '—';
 
-    // ── PSI bars (real computed values) ──
+    
     if (data.psi_features && data.psi_features.length > 0) {
       renderDriftBars(data.psi_features);
 
-      // Warn in log if any feature is in Alert
+      
       data.psi_features.forEach(f => {
         if (f.status === 'Alert') {
           appendLog('warn', `${f.feature} PSI=${f.psi.toFixed(2)} exceeds threshold ${f.threshold} — Alert`);
@@ -586,7 +552,7 @@ async function fetchDriftMetrics() {
       });
     }
 
-    // ── Drift trend chart (7-day from MLflow) ──
+    
     if (data.drift_trend && data.drift_trend.length > 0) {
       const labels    = data.drift_trend.map(d => d.day);
       const psiVals   = data.drift_trend.map(d => d.psi);
@@ -604,17 +570,17 @@ async function fetchDriftMetrics() {
   }
 }
 
-// ── Fetch /metrics/performance → updates RMSE chart + Feature Importance + Model Registry ──
+
 async function fetchPerformanceMetrics() {
   try {
     const data = await fetch(`${API()}/metrics/performance`).then(r => r.json());
 
-    // ── Live RMSE display ──
+    
     if (data.live_rmse != null) {
       $('live-rmse').textContent = `$${parseFloat(data.live_rmse).toFixed(4)}`;
     }
 
-    // ── RMSE / MAE chart (version history) ──
+    
     if (data.versions && data.versions.length > 0) {
       const labels   = data.versions.map(v => v.version);
       const rmseVals = data.versions.map(v => v.rmse ?? null);
@@ -627,7 +593,7 @@ async function fetchPerformanceMetrics() {
 
       appendLog('ok', `Performance chart updated: ${labels.length} model versions loaded from MLflow`);
 
-      // ── Model Registry table (if element exists in HTML) ──
+      
       const registryEl = $('model-registry-table');
       if (registryEl) {
         const statusColors = { LIVE: '#22c55e', SHADOW: '#f59e0b', ARCHIVE: '#8a94a6', DEPR: '#c0392b' };
@@ -660,7 +626,7 @@ async function fetchPerformanceMetrics() {
       }
     }
 
-    // ── Feature importance chart ──
+    
     if (data.feature_importance && data.feature_importance.length > 0) {
       const clean = name => name
         .replace(/_zone_.*|_weather_.*|_time_.*|_event_.*/, '')

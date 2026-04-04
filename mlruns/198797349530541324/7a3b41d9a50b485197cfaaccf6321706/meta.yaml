@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/DYANAMIC_PRICING_ENGINE/mlruns/198797349530541324/7a3b41d9a50b485197cfaaccf6321706/artifacts
+end_time: 1775304083970
+entry_point_name: ''
+experiment_id: '198797349530541324'
+lifecycle_stage: active
+run_id: 7a3b41d9a50b485197cfaaccf6321706
+run_name: drift_monitoring
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1775304083867
+status: 3
+tags: []
+user_id: anujp

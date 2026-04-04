@@ -9,11 +9,9 @@ from mlflow.models import infer_signature
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-# ── MLflow setup ───────────────────────────────────────────
+
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("Uber_Dynamic_Pricing")
-
-# 👇 Force local artifact storage
 import os
 os.environ["MLFLOW_ARTIFACT_URI"] = "./mlruns"
 
@@ -22,7 +20,7 @@ with mlflow.start_run():
     mlflow.log_artifact("drift_report.html")
 
 try:
-    # ── Load & clean data ──────────────────────────────────
+    
     data = pd.read_csv("uber.csv")
     data = data.dropna(subset=["fare_amount"])
     data = data[data["fare_amount"] > 0]
@@ -30,13 +28,12 @@ try:
     data = data[data["passenger_count"] > 0]
     data = data[data["passenger_count"] <= 6]
 
-    # ── ADD: Synthetic real-world features ─────────────────
+    
     demand_zones  = ["city_centre", "airport", "suburb", "industrial"]
     weather_types = ["clear", "rainy", "fog", "storm"]
     time_types    = ["morning", "afternoon", "night"]
-
-    # FIX: Correlated assignment — features now reflect fare_amount
-    # so the model actually learns meaningful relationships
+    
+    
     def assign_zone(fare):
         if fare > 30:   return "airport"
         elif fare > 20: return "city_centre"
@@ -55,23 +52,20 @@ try:
         else:           return "afternoon"
 
     def assign_event(fare):
-        # Higher fares more likely to have a nearby event
+        
         prob = min((fare - 5) / 40, 0.9) if fare > 5 else 0.1
         return int(np.random.random() < prob)
 
     data["demand_zone"]  = data["fare_amount"].apply(assign_zone)
     data["weather"]      = data["fare_amount"].apply(assign_weather)
     data["time_of_day"]  = data["fare_amount"].apply(assign_time)
-    data["event_nearby"] = data["fare_amount"].apply(assign_event)  # ✅ numeric (better)
+    data["event_nearby"] = data["fare_amount"].apply(assign_event)
 
-    # numeric feature — low driver count correlates with higher fares
     data["active_drivers"] = data["fare_amount"].apply(
         lambda f: max(1, int(np.random.normal(loc=max(2, 25 - f * 0.6), scale=3)))
     )
 
-    # ── FIX 3: Model learns surge from data — no hardcoded rules needed ──
-    # compute_surge mirrors the same logic that was in api.py if-else block
-    # Now we bake surge into the training target so XGBoost learns it directly
+    
     def compute_surge(row):
         surge = 1.0
         if row["demand_zone"] == "airport":         surge += 0.4
@@ -88,11 +82,8 @@ try:
     data["surge_multiplier"] = data.apply(compute_surge, axis=1)
     data["final_fare"]       = data["fare_amount"] * data["surge_multiplier"]
 
-    # FIX 3: Train on final_fare (surge-included) instead of bare fare_amount
-    # This means the model itself predicts the surge pricing — not hardcoded rules
-    target_col = "final_fare"   # was "fare_amount"
+    target_col = "final_fare"   
 
-    # Base features
     feature_cols = [
         "pickup_longitude",
         "pickup_latitude",
@@ -104,20 +95,17 @@ try:
 
     X = data[feature_cols].copy()
 
-    # ── ADD: One-hot encoding ──────────────────────────────
     categorical_cols = ["demand_zone", "weather", "time_of_day"]
 
     data_encoded = pd.get_dummies(
         data[categorical_cols],
-        drop_first=False   # ✅ keep all categories (safer for API)
+        drop_first=False  
     )
 
-    # event_nearby already numeric → add directly
     X = pd.concat([X, data_encoded, data[["event_nearby"]]], axis=1)
 
     y = data[target_col]
 
-    # Ensure numeric
     for col in X.columns:
         X[col] = X[col].astype(float)
     X = X.fillna(0)
@@ -168,7 +156,6 @@ try:
         )
         print("✅ Model registered: Price_Prediction_Engine")
 
-        # ── SAVE feature columns (CRITICAL FOR API) ─────────
         joblib.dump(X.columns.tolist(), "features.pkl")
         print("✅ features.pkl saved")
 

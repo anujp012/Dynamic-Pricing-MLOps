@@ -7,8 +7,7 @@ print("🚀 Setting up database...")
 try:
     conn = sqlite3.connect("data.db")
 
-    # FIX: Only create table if it doesn't already exist
-    # "replace" was wiping your data every time you ran this
+
     cursor = conn.cursor()
     cursor.execute("""
         SELECT name FROM sqlite_master

@@ -1,0 +1,12 @@
+import pandas as pd
+import os
+
+LIVE_DATA_PATH = "live_data.csv"
+
+def save_live_data(input_data):
+    df = pd.DataFrame([input_data])
+
+    if os.path.exists(LIVE_DATA_PATH):
+        df.to_csv(LIVE_DATA_PATH, mode='a', header=False, index=False)
+    else:
+        df.to_csv(LIVE_DATA_PATH, index=False)

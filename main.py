@@ -12,7 +12,7 @@ app = FastAPI(
     version="2.4.1"
 )
 
-# FIX: CORS so HTML frontend can call this API
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# FIX: Features match training exactly
+
 FEATURES = [
     "pickup_longitude",
     "pickup_latitude",
@@ -60,7 +60,7 @@ def predict(request: PredictionRequest):
         fare   = round(float(prediction[0]), 2)
         surge  = round(max(1.0, fare / 8.0), 2)
 
-        # Log to SQLite for drift monitoring
+        
         try:
             conn = sqlite3.connect("data.db")
             log  = df.copy()

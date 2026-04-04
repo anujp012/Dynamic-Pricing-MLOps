@@ -1,11 +1,11 @@
-# ── Stage 1: Install dependencies ─────────────────────────
+
 FROM python:3.10-slim AS builder
 
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
-# ── Stage 2: Lean final image ──────────────────────────────
+
 FROM python:3.10-slim
 
 WORKDIR /app

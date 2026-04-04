@@ -37,8 +37,8 @@ jobs:
       - name: Run Drift Analysis
         id: drift_check
         env:
-          DRIFT_THRESHOLD: "0.1"          # FIX: was 0.6 — too high to ever trigger
-          ALLOW_DRIFT: "false"            # FIX: was "true" — so retrain never fired
+          DRIFT_THRESHOLD: "0.1"          
+          ALLOW_DRIFT: "false"            
           FORCE_DRIFT: ${{ github.event.inputs.force_drift || 'false' }}
         run: |
          set +e
@@ -60,7 +60,7 @@ jobs:
           name: mlops-drift-report
           path: drift_report.html
 
-  # ══ JOB 2: Retrain — ONLY runs when drift detected ════════════════
+  # JOB 2: Retrain — ONLY runs when drift detected
   retrain:
     name: "02 — XGBoost Retrain + MLflow Log"
     needs: drift-detection
@@ -88,7 +88,7 @@ jobs:
           name: retrained-model
           path: model.pkl
 
-  # ══ JOB 3: Docker Build — ONLY after retrain ══════════════════════
+  # JOB 3: Docker Build — ONLY after retrain 
   build:
     name: "03 — Docker Build & Push"
     needs: retrain
@@ -113,7 +113,7 @@ jobs:
       #     docker tag mlops-app:latest ${{ secrets.DOCKER_USERNAME }}/mlops-app:latest
       #     docker push ${{ secrets.DOCKER_USERNAME }}/mlops-app:latest
 
-  # ══ JOB 4: Kubernetes Deploy — ONLY after Docker build ════════════
+  # JOB 4: Kubernetes Deploy — ONLY after Docker build 
   deploy:
     name: "04 — Kubernetes Rolling Deploy"
     needs: build
