@@ -24,10 +24,14 @@ def generate_new_data():
         drift_factor = np.random.uniform(0.98, 1.02)  # near zero — no drift expected
         print(f"✅ Normal mode — drift_factor: {drift_factor:.3f} (no drift expected)")
 
-    df["fare_amount"]     = df["fare_amount"] * drift_factor
-    df["passenger_count"] = df["passenger_count"].apply(
-        lambda x: min(6, max(1, x + np.random.choice([-1, 0, 0, 1, 1])))
-    )
+    df["fare_amount"] = df["fare_amount"] * drift_factor
+
+    # FIX: only shift passenger_count when drift is forced
+    # otherwise it causes false drift detection even with stable fares
+    if os.getenv("FORCE_DRIFT", "false").lower() == "true":
+        df["passenger_count"] = df["passenger_count"].apply(
+            lambda x: min(6, max(1, x + np.random.choice([-1, 0, 0, 1, 1])))
+        )
 
     new_df = df.sample(300, replace=True)
 
