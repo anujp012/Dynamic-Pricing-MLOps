@@ -9,18 +9,20 @@ from mlflow.models import infer_signature
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
+# FIX: changed from sqlite:///mlflow.db to file:./mlruns
+# sqlite backend causes schema version conflicts in GitHub Actions
+# file backend works everywhere with no database required
+mlflow.set_tracking_uri("file:./mlruns")
 mlflow.set_experiment("Uber_Dynamic_Pricing")
+
 import os
-os.environ["MLFLOW_ARTIFACT_URI"] = "./mlruns"
 
 with mlflow.start_run():
-  if os.path.exists("drift_report.html"):
-    mlflow.log_artifact("drift_report.html")
+    if os.path.exists("drift_report.html"):
+        mlflow.log_artifact("drift_report.html")
 
 try:
-    
+
     data = pd.read_csv("uber.csv")
     data = data.dropna(subset=["fare_amount"])
     data = data[data["fare_amount"] > 0]
@@ -28,12 +30,12 @@ try:
     data = data[data["passenger_count"] > 0]
     data = data[data["passenger_count"] <= 6]
 
-    
     demand_zones  = ["city_centre", "airport", "suburb", "industrial"]
     weather_types = ["clear", "rainy", "fog", "storm"]
     time_types    = ["morning", "afternoon", "night"]
-    
-    
+
+    # FIX: Correlated assignment — features now reflect fare_amount
+    # so the model actually learns meaningful relationships
     def assign_zone(fare):
         if fare > 30:   return "airport"
         elif fare > 20: return "city_centre"
@@ -52,7 +54,6 @@ try:
         else:           return "afternoon"
 
     def assign_event(fare):
-        
         prob = min((fare - 5) / 40, 0.9) if fare > 5 else 0.1
         return int(np.random.random() < prob)
 
@@ -65,7 +66,9 @@ try:
         lambda f: max(1, int(np.random.normal(loc=max(2, 25 - f * 0.6), scale=3)))
     )
 
-    
+    # FIX 3: Model learns surge from data — no hardcoded rules needed
+    # compute_surge mirrors the same logic that was in api.py if-else block
+    # Now we bake surge into the training target so XGBoost learns it directly
     def compute_surge(row):
         surge = 1.0
         if row["demand_zone"] == "airport":         surge += 0.4
@@ -82,7 +85,8 @@ try:
     data["surge_multiplier"] = data.apply(compute_surge, axis=1)
     data["final_fare"]       = data["fare_amount"] * data["surge_multiplier"]
 
-    target_col = "final_fare"   
+    # FIX 3: Train on final_fare (surge-included) instead of bare fare_amount
+    target_col = "final_fare"
 
     feature_cols = [
         "pickup_longitude",
@@ -99,7 +103,7 @@ try:
 
     data_encoded = pd.get_dummies(
         data[categorical_cols],
-        drop_first=False  
+        drop_first=False
     )
 
     X = pd.concat([X, data_encoded, data[["event_nearby"]]], axis=1)

@@ -50,7 +50,10 @@ def analyze_drift():
 
     generate_new_data()
 
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    # FIX: changed from sqlite:///mlflow.db to file:./mlruns
+    # sqlite backend causes schema version conflicts in GitHub Actions
+    # file backend works everywhere with no database required
+    mlflow.set_tracking_uri("file:./mlruns")
     mlflow.set_experiment("Uber_Dynamic_Pricing")
 
     conn      = sqlite3.connect("data.db")
