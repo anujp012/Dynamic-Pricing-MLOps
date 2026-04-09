@@ -2,12 +2,12 @@ import sys
 import os
 import pandas as pd
 import numpy as np
-import subprocess
 import mlflow
 import sqlite3
 
 from evidently.report import Report
 from evidently.metric_preset import DataDriftPreset
+
 
 def generate_new_data():
     print("📊 Generating new incoming data into database...")
@@ -15,28 +15,26 @@ def generate_new_data():
     conn = sqlite3.connect("data.db")
     df   = pd.read_sql("SELECT * FROM rides LIMIT 500", conn)
 
-    # FIX: FORCE_DRIFT=false → near-zero drift (will NOT trigger retraining)
-    #      FORCE_DRIFT=true  → strong drift   (WILL trigger retraining)
+    # FORCE_DRIFT=false → near-zero drift (will NOT trigger retraining)
+    # FORCE_DRIFT=true  → strong drift   (WILL trigger retraining)
     if os.getenv("FORCE_DRIFT", "false").lower() == "true":
-        drift_factor = np.random.uniform(1.5, 2.0)   # strong drift — triggers pipeline
+        drift_factor = np.random.uniform(1.5, 2.0)
         print(f"⚠️  FORCE_DRIFT enabled — drift_factor: {drift_factor:.3f}")
     else:
-        drift_factor = np.random.uniform(0.98, 1.02)  # near zero — no drift expected
+        drift_factor = np.random.uniform(0.98, 1.02)
         print(f"✅ Normal mode — drift_factor: {drift_factor:.3f} (no drift expected)")
 
     df["fare_amount"] = df["fare_amount"] * drift_factor
 
-    # FIX: only shift passenger_count when drift is forced
-    # otherwise it causes false drift detection even with stable fares
+    # Only shift passenger_count when drift is forced
     if os.getenv("FORCE_DRIFT", "false").lower() == "true":
         df["passenger_count"] = df["passenger_count"].apply(
             lambda x: min(6, max(1, x + np.random.choice([-1, 0, 0, 1, 1])))
         )
 
     new_df = df.sample(300, replace=True)
-
     new_df.to_csv("live_data.csv", index=False)
-    print("✅ live_data.csv saved — genuinely shifted from training distribution")
+    print("✅ live_data.csv saved")
 
     new_df.to_sql("rides", conn, if_exists="append", index=False)
     conn.close()
@@ -50,38 +48,45 @@ def analyze_drift():
 
     generate_new_data()
 
-    # FIX: changed from sqlite:///mlflow.db to file:./mlruns
-    # sqlite backend causes schema version conflicts in GitHub Actions
-    # file backend works everywhere with no database required
-    mlflow.set_tracking_uri("file:./mlruns")
+    # FIX: Use SQLite backend — file:./mlruns causes meta.yaml errors in CI
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
     mlflow.set_experiment("Uber_Dynamic_Pricing")
 
+    # ── Load reference data ────────────────────────────────
     conn      = sqlite3.connect("data.db")
     reference = pd.read_sql("SELECT * FROM rides LIMIT 500", conn)
     conn.close()
 
+    # ── Load current data ──────────────────────────────────
     if os.path.exists("live_data.csv"):
         current = pd.read_csv("live_data.csv")
-        print("✅ Using live_data.csv as current data for drift comparison")
+        print("✅ Using live_data.csv as current data")
     else:
         conn    = sqlite3.connect("data.db")
-        current = pd.read_sql("SELECT * FROM rides ORDER BY ROWID DESC LIMIT 300", conn)
+        current = pd.read_sql(
+            "SELECT * FROM rides ORDER BY ROWID DESC LIMIT 300", conn
+        )
         conn.close()
         print("⚠️  live_data.csv not found — falling back to DB query")
 
+    # ── Drop non-numeric columns ───────────────────────────
     drop_cols = ["key", "pickup_datetime"]
     reference = reference.drop(columns=[c for c in drop_cols if c in reference.columns])
     current   = current.drop(columns=[c for c in drop_cols if c in current.columns])
 
+    # ── Run Evidently drift report ─────────────────────────
     drift_report = Report(metrics=[DataDriftPreset()])
     drift_report.run(reference_data=reference, current_data=current)
     drift_report.save_html("drift_report.html")
     print("✅ Evidently drift report saved: drift_report.html")
 
+    # ── Extract drift score ────────────────────────────────
     result      = drift_report.as_dict()
     drift_score = 0.0
     try:
-        drift_score = result["metrics"][0]["result"].get("share_of_drifted_columns", 0)
+        drift_score = result["metrics"][0]["result"].get(
+            "share_of_drifted_columns", 0
+        )
     except Exception as e:
         print(f"⚠️  Error extracting drift score: {e}")
 
@@ -92,26 +97,30 @@ def analyze_drift():
 
     print(f"⚙️  Threshold: {DRIFT_THRESHOLD} | Allow Drift: {allow_drift}")
 
+    # ── Log to MLflow (inside active run) ──────────────────
     with mlflow.start_run(run_name="drift_monitoring"):
         mlflow.log_metric("drift_score",    drift_score)
         mlflow.log_param("drift_threshold", DRIFT_THRESHOLD)
         mlflow.log_param("allow_drift",     allow_drift)
-        mlflow.log_param("drift_status",    "DRIFT_DETECTED" if drift_score > DRIFT_THRESHOLD else "NO_DRIFT")
+        mlflow.log_param(
+            "drift_status",
+            "DRIFT_DETECTED" if drift_score > DRIFT_THRESHOLD else "NO_DRIFT"
+        )
+        # FIX: log_artifact is now safely inside the with block
         mlflow.log_artifact("drift_report.html")
 
+    # ── Decision ───────────────────────────────────────────
     if drift_score > DRIFT_THRESHOLD:
-        mlflow.log_param = lambda *a, **k: None
         print("❌ Drift detected!")
-
         if allow_drift:
-            print("⚠️  Drift allowed — continuing")
+            print("⚠️  Drift allowed — continuing without retrain")
             sys.exit(0)
         else:
             print("🔁 Signalling GitHub Actions to retrain...")
-        sys.exit(1)
+            sys.exit(1)   # exit(1) = drift detected → Job 02 retrains
     else:
-        print("✅ No significant drift")
-    sys.exit(0)
+        print("✅ No significant drift detected")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

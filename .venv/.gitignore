@@ -14,9 +14,6 @@ mlflow.db
 live_data.csv
 uber.csv
 
-# MLflow runs — too large for GitHub
-mlruns/
-
 # Drift report — generated file
 drift_report.html
 

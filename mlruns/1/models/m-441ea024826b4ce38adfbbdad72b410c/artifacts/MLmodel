@@ -1,0 +1,42 @@
+artifact_path: file:C:/DYANAMIC_PRICING_ENGINE/mlruns/1/models/m-441ea024826b4ce38adfbbdad72b410c/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.12.3
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBRegressor
+    model_format: ubj
+    xgb_version: 3.2.0
+is_signature_from_type_hint: false
+mlflow_version: 3.10.0
+model_id: m-441ea024826b4ce38adfbbdad72b410c
+model_size_bytes: 1250853
+model_uuid: m-441ea024826b4ce38adfbbdad72b410c
+prompts: null
+run_id: ff01123bb88345aa82a17a57cc57e53c
+signature:
+  inputs: '[{"type": "double", "name": "pickup_longitude", "required": true}, {"type":
+    "double", "name": "pickup_latitude", "required": true}, {"type": "double", "name":
+    "dropoff_longitude", "required": true}, {"type": "double", "name": "dropoff_latitude",
+    "required": true}, {"type": "double", "name": "passenger_count", "required": true},
+    {"type": "double", "name": "active_drivers", "required": true}, {"type": "double",
+    "name": "demand_zone_airport", "required": true}, {"type": "double", "name": "demand_zone_city_centre",
+    "required": true}, {"type": "double", "name": "demand_zone_industrial", "required":
+    true}, {"type": "double", "name": "demand_zone_suburb", "required": true}, {"type":
+    "double", "name": "weather_clear", "required": true}, {"type": "double", "name":
+    "weather_fog", "required": true}, {"type": "double", "name": "weather_rainy",
+    "required": true}, {"type": "double", "name": "weather_storm", "required": true},
+    {"type": "double", "name": "time_of_day_afternoon", "required": true}, {"type":
+    "double", "name": "time_of_day_morning", "required": true}, {"type": "double",
+    "name": "time_of_day_night", "required": true}, {"type": "double", "name": "event_nearby",
+    "required": true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float32", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-04-09 03:20:41.461837'

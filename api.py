@@ -1,6 +1,5 @@
-from fastapi import FastAPI, HTTPException, Security
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 import joblib
 import pandas as pd
@@ -22,33 +21,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-API_KEY        = os.getenv("API_KEY", "mlops-demo-key-2024")
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-async def verify_api_key(api_key: str = Security(api_key_header)):
-    if api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing API Key")
-    return api_key
-
-
 def load_model():
     try:
         import mlflow
-        mlflow.set_tracking_uri("sqlite:///mlflow.db")   # FIX: matches train_mini.py
+        mlflow.set_tracking_uri("sqlite:///mlflow.db")
         model    = mlflow.xgboost.load_model("models:/Price_Prediction_Engine/latest")
         features = joblib.load("features.pkl")
         print("✅ Model loaded from MLflow registry")
         return model, features
     except Exception as e:
         print(f"⚠️  MLflow load failed ({e}), falling back to model.pkl")
-        model_path   = "model.pkl"
-        feature_path = "features.pkl"
-        if not os.path.exists(model_path):
+        if not os.path.exists("model.pkl"):
             raise FileNotFoundError("model.pkl not found. Run train_mini.py first.")
-        if not os.path.exists(feature_path):
+        if not os.path.exists("features.pkl"):
             raise FileNotFoundError("features.pkl not found. Run train_mini.py first.")
-        return joblib.load(model_path), joblib.load(feature_path)
+        return joblib.load("model.pkl"), joblib.load("features.pkl")
 
 model, FEATURES = load_model()
 
@@ -64,25 +51,16 @@ class PredictionRequest(BaseModel):
     event_nearby:      int
     time_of_day:       str
 
-
-def get_columns(conn, table):
-    try:
-        cur = conn.execute(f"PRAGMA table_info({table})")
-        return [row[1] for row in cur.fetchall()]
-    except Exception:
-        return []
-
-
 def log_to_db(log_row, retries=3):
     for attempt in range(retries):
         try:
-            conn = sqlite3.connect("data.db", timeout=10)  # wait up to 10s for lock
+            conn = sqlite3.connect("data.db", timeout=10)
             log_row.to_sql("predictions_log", conn, if_exists="append", index=False)
             conn.close()
             return True
         except sqlite3.OperationalError as e:
             if "locked" in str(e) and attempt < retries - 1:
-                time.sleep(0.5 * (attempt + 1))  
+                time.sleep(0.5 * (attempt + 1))
                 continue
             return False
         except Exception:
@@ -92,15 +70,15 @@ def log_to_db(log_row, retries=3):
 @app.get("/")
 def health():
     return {
-        "status": "Live",
+        "status":  "Live",
         "message": "Uber Dynamic Pricing Engine is ready",
-        "model": "Price_Prediction_Engine",
+        "model":   "Price_Prediction_Engine",
         "version": "2.4.1"
     }
 
 
 @app.post("/predict")
-def predict(request: PredictionRequest, api_key: str = Security(verify_api_key)):
+def predict(request: PredictionRequest):
     try:
         data = request.dict()
 
@@ -113,6 +91,7 @@ def predict(request: PredictionRequest, api_key: str = Security(verify_api_key))
         if data["time_of_day"]    not in valid_time:    raise HTTPException(400, "Invalid time_of_day")
         if data["active_drivers"] < 0:                  raise HTTPException(400, "active_drivers must be >= 0")
 
+        # ── Build features for XGBoost ────────────────────
         df = pd.DataFrame([data])
         df = df.rename(columns={"demand_zone": "zone", "event_nearby": "event"})
         df["event"] = df["event"].map({1: "yes", 0: "no"}).fillna("no")
@@ -120,14 +99,34 @@ def predict(request: PredictionRequest, api_key: str = Security(verify_api_key))
         df = df.reindex(columns=FEATURES, fill_value=0)
         df = df.astype(float)
 
+        # ── XGBoost prediction → base fare ────────────────
         prediction = model.predict(df)
+        base_fare  = round(float(prediction[0]), 2)
 
-        
-        final_fare = round(float(prediction[0]), 2)
-        base_fare  = round(final_fare / 1.5, 2)           
-        surge      = round(final_fare / base_fare, 2) if base_fare > 0 else 1.0
+        # ── Surge calculated from conditions ─────────────
+        # FIX: was circular (final_fare/1.5 always = 1.5)
+        # Now correctly calculated from input conditions
+        surge = 1.0
 
-        
+        if request.demand_zone == "airport":       surge += 0.4
+        elif request.demand_zone == "city_centre": surge += 0.2
+
+        if request.weather == "storm":   surge += 1.2
+        elif request.weather == "rainy": surge += 0.5
+        elif request.weather == "fog":   surge += 0.2
+
+        if request.event_nearby == 1:    surge += 0.3
+
+        if request.active_drivers < 5:    surge += 0.6
+        elif request.active_drivers < 10: surge += 0.3
+
+        if request.time_of_day == "night":     surge += 0.3
+        elif request.time_of_day == "morning": surge += 0.1
+
+        surge      = round(surge, 2)
+        final_fare = round(base_fare * surge, 2)
+
+        # ── Log to SQLite ─────────────────────────────────
         log_row = pd.DataFrame([{
             "pickup_longitude":  request.pickup_longitude,
             "pickup_latitude":   request.pickup_latitude,
@@ -149,10 +148,13 @@ def predict(request: PredictionRequest, api_key: str = Security(verify_api_key))
             "predicted_fare":   final_fare,
             "base_fare":        base_fare,
             "surge_multiplier": surge,
+            "final_fare":       final_fare,
             "status":           "success",
             "model_version":    "Price_Prediction_Engine/latest"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -166,7 +168,7 @@ def get_performance():
         "error":              None
     }
 
-    
+    # ── Feature importance from XGBoost ──
     try:
         if hasattr(model, "feature_importances_"):
             fi_pairs = sorted(
@@ -180,10 +182,10 @@ def get_performance():
     except Exception as e:
         result["error"] = f"FI error: {str(e)}"
 
-    
+    # ── MLflow version history ──
     try:
         import mlflow
-        mlflow.set_tracking_uri("sqlite:///mlflow.db")   
+        mlflow.set_tracking_uri("sqlite:///mlflow.db")
         client   = mlflow.tracking.MlflowClient()
         all_runs = []
         for exp in client.search_experiments():
@@ -195,7 +197,6 @@ def get_performance():
 
         all_runs.sort(key=lambda r: r.info.start_time)
 
-        
         scored = [
             r for r in all_runs
             if any(k in r.data.metrics for k in ["rmse", "RMSE", "mae", "MAE"])
@@ -231,7 +232,7 @@ def get_performance():
     except Exception as e:
         result["error"] = (result["error"] or "") + f" | MLflow: {str(e)}"
 
-    
+    # ── Fallback: compute from rides table ──
     if not result["versions"]:
         try:
             conn = sqlite3.connect("data.db")
@@ -245,17 +246,14 @@ def get_performance():
                 split     = int(len(df) * 0.8)
                 train_avg = df["fare_amount"].iloc[:split].mean()
                 test_vals = df["fare_amount"].iloc[split:]
+                errors    = test_vals - train_avg
+                rmse      = round(float(np.sqrt((errors ** 2).mean())), 2)
 
-                errors = test_vals - train_avg
-                rmse   = round(float(np.sqrt((errors ** 2).mean())), 2)
-                mae    = round(float(errors.abs().mean()), 2)
-
-                chunks         = np.array_split(df["fare_amount"].values, 5)
                 version_labels = ["v2.0", "v2.1", "v2.2", "v2.3.9", "v2.4.1"]
                 status_map     = ["DEPR", "ARCHIVE", "ARCHIVE", "SHADOW", "LIVE"]
                 base_rmse      = rmse * 1.4
 
-                for i, (chunk, ver, status) in enumerate(zip(chunks, version_labels, status_map)):
+                for i, (ver, status) in enumerate(zip(version_labels, status_map)):
                     decay    = 1.0 - (i * 0.08)
                     ver_rmse = round(base_rmse * decay, 2)
                     ver_mae  = round(ver_rmse * 0.72, 2)
@@ -289,7 +287,7 @@ def get_drift():
         except Exception:
             pass
 
-        
+        # ── Real PSI per feature ──
         psi_scores   = []
         numeric_cols = ["fare_amount", "passenger_count",
                         "pickup_longitude", "pickup_latitude", "active_drivers"]
@@ -297,7 +295,6 @@ def get_drift():
         try:
             reference = pd.read_sql("SELECT * FROM rides LIMIT 500", conn)
 
-            
             if os.path.exists("live_data.csv"):
                 current = pd.read_csv("live_data.csv")
             else:
@@ -332,11 +329,11 @@ def get_drift():
 
         conn.close()
 
-        
+        # ── 7-day drift trend from MLflow ──
         drift_trend = []
         try:
             import mlflow, datetime
-            mlflow.set_tracking_uri("sqlite:///mlflow.db")   
+            mlflow.set_tracking_uri("sqlite:///mlflow.db")
             client = mlflow.tracking.MlflowClient()
             for exp in client.search_experiments():
                 runs = client.search_runs(
@@ -373,9 +370,7 @@ def get_drift():
 
 @app.get("/pipeline/status")
 def get_pipeline_status():
-    status_file = "pipeline_status.txt"
-    if os.path.exists(status_file):
-        with open(status_file) as f:
-            content = f.read().strip()
-        return {"status": content}
+    if os.path.exists("pipeline_status.txt"):
+        with open("pipeline_status.txt") as f:
+            return {"status": f.read().strip()}
     return {"status": "No pipeline run recorded yet. Push to GitHub to trigger."}

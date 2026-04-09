@@ -4,25 +4,21 @@ import mlflow.xgboost
 import pandas as pd
 import joblib
 import sys
+import os
 import numpy as np
 from mlflow.models import infer_signature
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-# FIX: changed from sqlite:///mlflow.db to file:./mlruns
-# sqlite backend causes schema version conflicts in GitHub Actions
-# file backend works everywhere with no database required
-mlflow.set_tracking_uri("file:./mlruns")
+# FIX: Use SQLite backend — file:./mlruns causes meta.yaml errors in CI
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("Uber_Dynamic_Pricing")
 
-import os
-
-with mlflow.start_run():
-    if os.path.exists("drift_report.html"):
-        mlflow.log_artifact("drift_report.html")
+# NOTE: Removed the stray `with mlflow.start_run()` block that was
+# running BEFORE the try block — that caused PermissionError in GitHub Actions
 
 try:
-
+    # ── Load & clean data ──────────────────────────────────
     data = pd.read_csv("uber.csv")
     data = data.dropna(subset=["fare_amount"])
     data = data[data["fare_amount"] > 0]
@@ -30,12 +26,7 @@ try:
     data = data[data["passenger_count"] > 0]
     data = data[data["passenger_count"] <= 6]
 
-    demand_zones  = ["city_centre", "airport", "suburb", "industrial"]
-    weather_types = ["clear", "rainy", "fog", "storm"]
-    time_types    = ["morning", "afternoon", "night"]
-
-    # FIX: Correlated assignment — features now reflect fare_amount
-    # so the model actually learns meaningful relationships
+    # ── Synthetic features correlated with fare_amount ─────
     def assign_zone(fare):
         if fare > 30:   return "airport"
         elif fare > 20: return "city_centre"
@@ -61,51 +52,38 @@ try:
     data["weather"]      = data["fare_amount"].apply(assign_weather)
     data["time_of_day"]  = data["fare_amount"].apply(assign_time)
     data["event_nearby"] = data["fare_amount"].apply(assign_event)
-
     data["active_drivers"] = data["fare_amount"].apply(
         lambda f: max(1, int(np.random.normal(loc=max(2, 25 - f * 0.6), scale=3)))
     )
 
-    # FIX 3: Model learns surge from data — no hardcoded rules needed
-    # compute_surge mirrors the same logic that was in api.py if-else block
-    # Now we bake surge into the training target so XGBoost learns it directly
+    # ── Compute surge and bake into training target ────────
     def compute_surge(row):
         surge = 1.0
-        if row["demand_zone"] == "airport":         surge += 0.4
-        elif row["demand_zone"] == "city_centre":   surge += 0.2
-        if row["weather"] == "storm":               surge += 0.7
-        elif row["weather"] == "rainy":             surge += 0.5
-        elif row["weather"] == "fog":               surge += 0.2
-        if row["time_of_day"] == "night":           surge += 0.3
-        elif row["time_of_day"] == "morning":       surge += 0.1
-        if row["active_drivers"] < 5:               surge += 0.6
-        elif row["active_drivers"] < 10:            surge += 0.3
+        if row["demand_zone"] == "airport":       surge += 0.4
+        elif row["demand_zone"] == "city_centre": surge += 0.2
+        if row["weather"] == "storm":             surge += 1.2
+        elif row["weather"] == "rainy":           surge += 0.5
+        elif row["weather"] == "fog":             surge += 0.2
+        if row["time_of_day"] == "night":         surge += 0.3
+        elif row["time_of_day"] == "morning":     surge += 0.1
+        if row["active_drivers"] < 5:             surge += 0.6
+        elif row["active_drivers"] < 10:          surge += 0.3
         return surge
 
     data["surge_multiplier"] = data.apply(compute_surge, axis=1)
     data["final_fare"]       = data["fare_amount"] * data["surge_multiplier"]
 
-    # FIX 3: Train on final_fare (surge-included) instead of bare fare_amount
-    target_col = "final_fare"
-
+    target_col   = "final_fare"
     feature_cols = [
-        "pickup_longitude",
-        "pickup_latitude",
-        "dropoff_longitude",
-        "dropoff_latitude",
-        "passenger_count",
-        "active_drivers"
+        "pickup_longitude", "pickup_latitude",
+        "dropoff_longitude", "dropoff_latitude",
+        "passenger_count",  "active_drivers"
     ]
 
     X = data[feature_cols].copy()
 
     categorical_cols = ["demand_zone", "weather", "time_of_day"]
-
-    data_encoded = pd.get_dummies(
-        data[categorical_cols],
-        drop_first=False
-    )
-
+    data_encoded     = pd.get_dummies(data[categorical_cols], drop_first=False)
     X = pd.concat([X, data_encoded, data[["event_nearby"]]], axis=1)
 
     y = data[target_col]
@@ -116,6 +94,7 @@ try:
 
     print(f"--- Training on {len(data)} rows | Target: {target_col} ---")
 
+    # ── MLflow run ─────────────────────────────────────────
     with mlflow.start_run(run_name="Retrained_Uber_Fare_Model"):
 
         X_train, X_test, y_train, y_test = train_test_split(
@@ -159,6 +138,11 @@ try:
             registered_model_name="Price_Prediction_Engine"
         )
         print("✅ Model registered: Price_Prediction_Engine")
+
+        # Log drift report if it exists (safe — inside active run)
+        if os.path.exists("drift_report.html"):
+            mlflow.log_artifact("drift_report.html")
+            print("✅ drift_report.html logged to MLflow")
 
         joblib.dump(X.columns.tolist(), "features.pkl")
         print("✅ features.pkl saved")

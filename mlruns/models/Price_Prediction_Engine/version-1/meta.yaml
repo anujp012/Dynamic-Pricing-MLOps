@@ -1,0 +1,16 @@
+creation_timestamp: 1775704288470
+current_stage: None
+deployment_job_state: null
+description: null
+last_updated_timestamp: 1775704288470
+model_id: m-f832289aceda484e82e17d78c0b8ec16
+name: Price_Prediction_Engine
+run_id: b02660da945e4ae78ad14857c822225c
+run_link: null
+source: models:/m-f832289aceda484e82e17d78c0b8ec16
+status: READY
+status_message: null
+storage_location: file:///C:/DYANAMIC_PRICING_ENGINE/mlruns/198797349530541324/models/m-f832289aceda484e82e17d78c0b8ec16/artifacts
+user_id: null
+version: 1
+workspace: default

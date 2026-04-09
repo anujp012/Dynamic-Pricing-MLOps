@@ -463,7 +463,7 @@ async function runPrediction() {
     $('r-base').textContent    = `$${baseFare.toFixed(2)}`;
     $('r-footnote').textContent = `Model: ${modelVer} · Logged to SQLite · ${new Date().toLocaleTimeString()}`;
 
-    const pct = Math.min(((surge - 1.0) / 2.5) * 100, 100);
+    const pct = Math.min(((surge - 1.0) / 1.5) * 100, 100);
     $('surge-fill').style.width = `${pct}%`;
 
     show($('result-panel'));
