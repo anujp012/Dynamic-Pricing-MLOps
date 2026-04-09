@@ -10,6 +10,11 @@ from mlflow.models import infer_signature
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
+# FIX: Delete stale mlflow.db to avoid schema mismatch errors in CI
+if os.path.exists("mlflow.db"):
+    os.remove("mlflow.db")
+    print("🧹 Deleted stale mlflow.db to avoid schema mismatch")
+
 # FIX: Use SQLite backend — file:./mlruns causes meta.yaml errors in CI
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
 mlflow.set_experiment("Uber_Dynamic_Pricing")
